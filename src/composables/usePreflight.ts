@@ -28,7 +28,6 @@ export interface PreflightResponse {
     authenticated: boolean
     authUser: string
     aiSandboxFound: boolean
-    aiSandboxPath: string
   }
   ollama: {
     installed: boolean
@@ -40,7 +39,7 @@ export interface PreflightResponse {
   gpgSigning: {
     enabled: boolean
     program: string
-    signingKey: string
+    keyConfigured: boolean
     keyValid: boolean
     pinentryOk: boolean
   }
@@ -91,12 +90,12 @@ export function usePreflight() {
   // gh install state
   const installLog = ref<string[]>([])
   const installStatus = ref<'idle' | 'running' | 'success' | 'error'>('idle')
-  let installSource: EventSource | null = null
+  let installAbortController: AbortController | null = null
 
   // kiro install state
   const kiroInstallLog = ref<string[]>([])
   const kiroInstallStatus = ref<'idle' | 'running' | 'success' | 'error'>('idle')
-  let kiroInstallSource: EventSource | null = null
+  let kiroInstallAbortController: AbortController | null = null
 
   // GPG signing enable state
   const signingEnableStatus = ref<'idle' | 'running' | 'success' | 'error'>('idle')
@@ -112,7 +111,6 @@ export function usePreflight() {
 
   // ai-sandbox repo check (non-blocking)
   const aiSandboxFound = ref<boolean | null>(null)
-  const aiSandboxPath = ref('')
 
   // Team selection
   const availableTeams = ref<TeamInfo[]>([])
@@ -200,7 +198,6 @@ export function usePreflight() {
           ? { status: 'ok',   detail: data.kiro.authUser ? `Signed in as ${data.kiro.authUser}` : 'Authenticated' }
           : { status: 'fail', detail: data.kiro.installed ? 'Not authenticated — run: sbx exec di-kiro-ai-sandbox kiro-cli login' : 'kiro-cli not available in sandbox' }
         aiSandboxFound.value = data.kiro.aiSandboxFound ?? false
-        aiSandboxPath.value = data.kiro.aiSandboxPath ?? ''
       } else {
         checks.value.sbxInstalled  = { status: 'pending', detail: '' }
         checks.value.kiroInstalled = { status: 'pending', detail: '' }
@@ -231,13 +228,13 @@ export function usePreflight() {
       const gpg = data.gpgSigning
       if (gpg.enabled && gpg.keyValid && gpg.pinentryOk) {
         const prog = gpg.program ? ` · ${gpg.program}` : ''
-        checks.value.gpgSigning = { status: 'ok', detail: `Key ${gpg.signingKey}${prog}` }
+        checks.value.gpgSigning = { status: 'ok', detail: `Signing key configured${prog}` }
       } else if (gpg.enabled && gpg.keyValid && !gpg.pinentryOk) {
         checks.value.gpgSigning = { status: 'fail', detail: 'pinentry-mac not configured — commits will fail without a TTY (click Enable to fix)' }
-      } else if (!gpg.keyValid && gpg.signingKey) {
-        checks.value.gpgSigning = { status: 'fail', detail: `Signing key ${gpg.signingKey} not found in GPG keyring` }
+      } else if (!gpg.keyValid && gpg.keyConfigured) {
+        checks.value.gpgSigning = { status: 'fail', detail: 'Signing key not found in GPG keyring' }
       } else if (!gpg.enabled) {
-        checks.value.gpgSigning = { status: 'fail', detail: gpg.signingKey ? `commit.gpgsign is off (key ${gpg.signingKey} available)` : 'commit.gpgsign is off — no signing key configured' }
+        checks.value.gpgSigning = { status: 'fail', detail: gpg.keyConfigured ? 'commit.gpgsign is off (key available)' : 'commit.gpgsign is off — no signing key configured' }
       } else {
         checks.value.gpgSigning = { status: 'fail', detail: 'No GPG signing key configured' }
       }
@@ -256,74 +253,84 @@ export function usePreflight() {
     }
   }
 
+  // ---- Shared POST-SSE stream reader ----
+  async function runPostSseInstall(
+    url: string,
+    log: typeof installLog,
+    status: typeof installStatus,
+    abortControllerRef: { value: AbortController | null },
+  ) {
+    abortControllerRef.value?.abort()
+    const controller = new AbortController()
+    abortControllerRef.value = controller
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      })
+
+      if (!response.ok || !response.body) {
+        status.value = 'error'
+        log.value.push(`[Server error: ${response.status}]`)
+        return
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() ?? ''
+
+        for (const block of parts) {
+          let eventType = 'message'
+          let dataLine = ''
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim()
+            else if (line.startsWith('data: ')) dataLine = line.slice(6).trim()
+          }
+          if (!dataLine) continue
+          const payload: string = JSON.parse(dataLine)
+          if (eventType === 'log') {
+            payload.split('\n').forEach((l) => { if (l.trim()) log.value.push(l) })
+          } else if (eventType === 'done') {
+            abortControllerRef.value = null
+            status.value = payload === 'success' ? 'success' : 'error'
+            if (payload === 'success') await runChecks()
+            return
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      status.value = 'error'
+      log.value.push('[Connection lost — the install may still be running. Re-run checks once complete.]')
+    } finally {
+      if (abortControllerRef.value === controller) abortControllerRef.value = null
+    }
+  }
+
   // ---- Install gh ----
   function installGh() {
     installLog.value = []
     installStatus.value = 'running'
-
-    if (installSource) installSource.close()
-    installSource = new EventSource('/api/dependabot-install-gh')
-
-    installSource.addEventListener('log', (e: MessageEvent) => {
-      const line: string = JSON.parse(e.data)
-      line.split('\n').forEach((l) => {
-        if (l.trim()) installLog.value.push(l)
-      })
-    })
-
-    installSource.addEventListener('done', async (e: MessageEvent) => {
-      const outcome: string = JSON.parse(e.data)
-      installSource?.close()
-      installSource = null
-      installStatus.value = outcome === 'success' ? 'success' : 'error'
-      if (outcome === 'success') {
-        await runChecks()
-      }
-    })
-
-    installSource.onerror = () => {
-      if (installStatus.value === 'running') {
-        installSource?.close()
-        installSource = null
-        installStatus.value = 'error'
-        installLog.value.push('[Connection lost — the install may still be running. Re-run checks once complete.]')
-      }
-    }
+    const ref = { get value() { return installAbortController }, set value(v) { installAbortController = v } }
+    runPostSseInstall('/api/dependabot-install-gh', installLog, installStatus, ref)
   }
 
   // ---- Install kiro-cli ----
   function installKiro() {
     kiroInstallLog.value = []
     kiroInstallStatus.value = 'running'
-
-    if (kiroInstallSource) kiroInstallSource.close()
-    kiroInstallSource = new EventSource('/api/dependabot-install-kiro')
-
-    kiroInstallSource.addEventListener('log', (e: MessageEvent) => {
-      const line: string = JSON.parse(e.data)
-      line.split('\n').forEach((l) => {
-        if (l.trim()) kiroInstallLog.value.push(l)
-      })
-    })
-
-    kiroInstallSource.addEventListener('done', async (e: MessageEvent) => {
-      const outcome: string = JSON.parse(e.data)
-      kiroInstallSource?.close()
-      kiroInstallSource = null
-      kiroInstallStatus.value = outcome === 'success' ? 'success' : 'error'
-      if (outcome === 'success') {
-        await runChecks()
-      }
-    })
-
-    kiroInstallSource.onerror = () => {
-      if (kiroInstallStatus.value === 'running') {
-        kiroInstallSource?.close()
-        kiroInstallSource = null
-        kiroInstallStatus.value = 'error'
-        kiroInstallLog.value.push('[Connection lost — the install may still be running. Re-run checks once complete.]')
-      }
-    }
+    const ref = { get value() { return kiroInstallAbortController }, set value(v) { kiroInstallAbortController = v } }
+    runPostSseInstall('/api/dependabot-install-kiro', kiroInstallLog, kiroInstallStatus, ref)
   }
 
   // ---- Enable GPG commit signing ----
@@ -440,8 +447,8 @@ export function usePreflight() {
 
   // ---- Cleanup ----
   function cleanup() {
-    installSource?.close()
-    kiroInstallSource?.close()
+    installAbortController?.abort()
+    kiroInstallAbortController?.abort()
   }
 
   // ---- Restore from localStorage ----
@@ -493,7 +500,6 @@ export function usePreflight() {
     teamsLoading,
     teamsError,
     aiSandboxFound,
-    aiSandboxPath,
 
     // Computed
     allOk,

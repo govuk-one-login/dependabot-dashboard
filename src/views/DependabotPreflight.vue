@@ -27,7 +27,6 @@ const {
   teamsLoading,
   teamsError,
   aiSandboxFound,
-  aiSandboxPath,
   allOk,
   ghStepOk,
   agentStepOk,
@@ -341,7 +340,7 @@ onUnmounted(cleanup)
             </div>
             <p v-if="checks.kiroAuth.status === 'fail' && checks.kiroInstalled.status === 'ok'" class="help-text">
               Run <code>kiro-cli</code> in your terminal to sign in via IAM Identity Centre.
-              Use <code>https://uk-digital-identity.awsapps.com/start</code> as Start URL and <code>eu-west-2</code> as Region.
+              Use your organisation's SSO Start URL and <code>eu-west-2</code> as Region.
               <strong>Requires VPN.</strong>
             </p>
           </template>
@@ -391,7 +390,7 @@ onUnmounted(cleanup)
           </span>
           <div class="check-item__text">
             <span class="check-item__label">ai-sandbox repo</span>
-            <span class="check-item__detail">{{ aiSandboxFound ? aiSandboxPath : 'Repository not found locally' }}</span>
+            <span class="check-item__detail">{{ aiSandboxFound ? 'Repository found locally' : 'Repository not found locally' }}</span>
           </div>
         </div>
         <div v-if="agentChoice === 'kiro' && aiSandboxFound === false" class="notice-box">

@@ -183,13 +183,6 @@ router.get("/dependabot-preflight", async (req: Request, res: Response) => {
     brew: { installed: brewInstalled },
     sbx: {
       installed: sbxInstalled,
-      _debug: {
-        execRaw: sbxExecRaw,
-        execFound: sbxExecFound,
-        fsHits: sbxFsHits,
-        home: process.env.HOME,
-        sbxPath: SBX_PATH,
-      },
     },
     kiro: {
       installed: kiroInstalled,
@@ -197,7 +190,6 @@ router.get("/dependabot-preflight", async (req: Request, res: Response) => {
       authenticated: kiroAuthenticated,
       authUser: kiroAuthUser,
       aiSandboxFound,
-      aiSandboxPath,
     },
     ollama: {
       installed: ollamaInstalled,
@@ -209,7 +201,7 @@ router.get("/dependabot-preflight", async (req: Request, res: Response) => {
     gpgSigning: {
       enabled: gpgSignEnabled,
       program: gpgProgram,
-      signingKey,
+      keyConfigured: !!signingKey,
       keyValid: gpgKeyValid,
       pinentryOk,
     },
@@ -299,7 +291,7 @@ router.post(
   },
 );
 
-router.get("/dependabot-install-gh", (req: Request, res: Response) => {
+router.post("/dependabot-install-gh", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -324,7 +316,7 @@ router.get("/dependabot-install-gh", (req: Request, res: Response) => {
   req.on("close", () => child.kill());
 });
 
-router.get("/dependabot-install-kiro", (req: Request, res: Response) => {
+router.post("/dependabot-install-kiro", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");

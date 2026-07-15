@@ -1,9 +1,19 @@
 import { Router, Request, Response } from "express";
-import { exec, runCommand, BREW_PATH } from "../helpers.js";
+import { execFile, runCommand, BREW_PATH } from "../helpers.js";
 import { GITHUB_ORG, getRepoCache, isKnownRepo } from "./teams-cache.js";
 import { fetchDependabotPrsForRepo } from "./pr-fetching.js";
 
 const router = Router();
+
+/** Validate that prNumber is a safe positive integer string */
+function isValidPrNumber(value: unknown): value is string {
+  return typeof value === "string" && /^\d{1,10}$/.test(value) && parseInt(value, 10) > 0;
+}
+
+/** Validate that repo is a safe repo name (alphanumeric, hyphens, underscores, dots only) */
+function isValidRepoName(value: unknown): value is string {
+  return typeof value === "string" && /^[a-zA-Z0-9._-]{1,100}$/.test(value);
+}
 
 // ── PR listing and actions ──────────────────────────────────────────────────
 
@@ -80,6 +90,14 @@ router.get(
     };
     if (!repo || !prNumber) {
       res.status(400).json({ error: "repo and prNumber are required" });
+      return;
+    }
+    if (!isValidPrNumber(prNumber) || !isValidRepoName(repo)) {
+      res.status(400).json({ error: "Invalid repo or prNumber" });
+      return;
+    }
+    if (!(await isKnownRepo(repo))) {
+      res.status(400).json({ error: "Unknown repository" });
       return;
     }
     try {
@@ -159,15 +177,25 @@ router.get(
   },
 );
 
-router.post("/dependabot-approve-pr", (req: Request, res: Response) => {
+router.post("/dependabot-approve-pr", async (req: Request, res: Response) => {
   const { repo, prNumber } = req.body as { repo: string; prNumber: number };
   if (!repo || !prNumber) {
     res.status(400).json({ error: "Missing repo or prNumber" });
     return;
   }
-  exec(
-    `gh pr review ${prNumber} --repo ${GITHUB_ORG}/${repo} --approve`,
-    { shell: "/bin/sh", env: { ...process.env, PATH: BREW_PATH } },
+  const prNumberStr = String(prNumber);
+  if (!isValidPrNumber(prNumberStr) || !isValidRepoName(repo)) {
+    res.status(400).json({ error: "Invalid repo or prNumber" });
+    return;
+  }
+  if (!(await isKnownRepo(repo))) {
+    res.status(400).json({ error: "Unknown repository" });
+    return;
+  }
+  execFile(
+    "gh",
+    ["pr", "review", prNumberStr, "--repo", `${GITHUB_ORG}/${repo}`, "--approve"],
+    { env: { ...process.env, PATH: BREW_PATH } },
     (error: Error | null, _stdout: string, stderr: string) => {
       if (error) {
         res.status(500).json({ error: stderr || error.message });
@@ -178,15 +206,25 @@ router.post("/dependabot-approve-pr", (req: Request, res: Response) => {
   );
 });
 
-router.post("/dependabot-merge-pr", (req: Request, res: Response) => {
+router.post("/dependabot-merge-pr", async (req: Request, res: Response) => {
   const { repo, prNumber } = req.body as { repo: string; prNumber: number };
   if (!repo || !prNumber) {
     res.status(400).json({ error: "Missing repo or prNumber" });
     return;
   }
-  exec(
-    `gh pr merge ${prNumber} --repo ${GITHUB_ORG}/${repo} --squash --auto`,
-    { shell: "/bin/sh", env: { ...process.env, PATH: BREW_PATH } },
+  const prNumberStr = String(prNumber);
+  if (!isValidPrNumber(prNumberStr) || !isValidRepoName(repo)) {
+    res.status(400).json({ error: "Invalid repo or prNumber" });
+    return;
+  }
+  if (!(await isKnownRepo(repo))) {
+    res.status(400).json({ error: "Unknown repository" });
+    return;
+  }
+  execFile(
+    "gh",
+    ["pr", "merge", prNumberStr, "--repo", `${GITHUB_ORG}/${repo}`, "--squash", "--auto"],
+    { env: { ...process.env, PATH: BREW_PATH } },
     (error: Error | null, _stdout: string, stderr: string) => {
       if (error) {
         res.status(500).json({ error: stderr || error.message });
@@ -203,13 +241,19 @@ router.post("/dependabot-update-branch", async (req: Request, res: Response) => 
     res.status(400).json({ error: "Missing repo or prNumber" });
     return;
   }
+  const prNumberStr = String(prNumber);
+  if (!isValidPrNumber(prNumberStr) || !isValidRepoName(repo)) {
+    res.status(400).json({ error: "Invalid repo or prNumber" });
+    return;
+  }
   if (!(await isKnownRepo(repo))) {
     res.status(400).json({ error: "Unknown repository" });
     return;
   }
-  exec(
-    `gh pr comment ${prNumber} --repo ${GITHUB_ORG}/${repo} --body "@dependabot rebase"`,
-    { shell: "/bin/sh", env: { ...process.env, PATH: BREW_PATH } },
+  execFile(
+    "gh",
+    ["pr", "comment", prNumberStr, "--repo", `${GITHUB_ORG}/${repo}`, "--body", "@dependabot rebase"],
+    { env: { ...process.env, PATH: BREW_PATH } },
     (error: Error | null, _stdout: string, stderr: string) => {
       if (error) {
         res.status(500).json({ error: stderr || error.message });
@@ -226,13 +270,19 @@ router.post("/dependabot-recreate-pr", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Missing repo or prNumber" });
     return;
   }
+  const prNumberStr = String(prNumber);
+  if (!isValidPrNumber(prNumberStr) || !isValidRepoName(repo)) {
+    res.status(400).json({ error: "Invalid repo or prNumber" });
+    return;
+  }
   if (!(await isKnownRepo(repo))) {
     res.status(400).json({ error: "Unknown repository" });
     return;
   }
-  exec(
-    `gh pr comment ${prNumber} --repo ${GITHUB_ORG}/${repo} --body "@dependabot recreate"`,
-    { shell: "/bin/sh", env: { ...process.env, PATH: BREW_PATH } },
+  execFile(
+    "gh",
+    ["pr", "comment", prNumberStr, "--repo", `${GITHUB_ORG}/${repo}`, "--body", "@dependabot recreate"],
+    { env: { ...process.env, PATH: BREW_PATH } },
     (error, _stdout, stderr) => {
       if (error) {
         res.status(500).json({ error: stderr || error.message });
@@ -249,13 +299,19 @@ router.post("/dependabot-delete-branch", async (req: Request, res: Response) => 
     res.status(400).json({ error: "Missing repo or prNumber" });
     return;
   }
+  const prNumberStr = String(prNumber);
+  if (!isValidPrNumber(prNumberStr) || !isValidRepoName(repo)) {
+    res.status(400).json({ error: "Invalid repo or prNumber" });
+    return;
+  }
   if (!(await isKnownRepo(repo))) {
     res.status(400).json({ error: "Unknown repository" });
     return;
   }
-  exec(
-    `gh pr close ${prNumber} --repo ${GITHUB_ORG}/${repo} --delete-branch`,
-    { shell: "/bin/sh", env: { ...process.env, PATH: BREW_PATH } },
+  execFile(
+    "gh",
+    ["pr", "close", prNumberStr, "--repo", `${GITHUB_ORG}/${repo}`, "--delete-branch"],
+    { env: { ...process.env, PATH: BREW_PATH } },
     (error, _stdout, stderr) => {
       if (error) {
         res.status(500).json({ error: stderr || error.message });

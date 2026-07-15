@@ -1,4 +1,4 @@
-- **Ticket Number**: https://govukverify.atlassian.net/browse/DPT-
+- **Ticket Number**: [link to ticket]
 
 ## :bulb: Description
 

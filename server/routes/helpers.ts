@@ -1,4 +1,4 @@
-import { exec, spawn } from "child_process";
+import { exec, execFile, spawn } from "child_process";
 import os from "os";
 
 // In-memory store for assumed role credentials keyed by profile
@@ -83,4 +83,4 @@ export async function runSandboxCommand(
   });
 }
 
-export { exec, spawn, os };
+export { exec, execFile, spawn, os };

@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, watch } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { ActionState } from '@/types/dependabot'
 import DiffViewer from './DiffViewer.vue'
 
 marked.setOptions({ breaks: true, gfm: true })
+
+function sanitize(html: string): string {
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+}
 
 interface CheckFailure {
   name: string
@@ -91,7 +96,7 @@ function renderSummaryMarkdown(raw: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
-  return escaped
+  const html = escaped
     .replace(/^### (.+)$/gm, '<h4>$1</h4>')
     .replace(/^## (.+)$/gm, '<h3>$1</h3>')
     .replace(/^# (.+)$/gm, '<h2>$1</h2>')
@@ -102,6 +107,7 @@ function renderSummaryMarkdown(raw: string): string {
     .replace(/\n{2,}/g, '</p><p>')
     .replace(/^(?!<[hul])(.+)$/gm, '<p>$1</p>')
     .replaceAll('<p></p>', '')
+  return sanitize(html)
 }
 
 // ── Dropdown menu positioning (fixed to escape overflow clipping) ──
@@ -301,7 +307,7 @@ function runFixWithInstructions() {
         </div>
 
         <div class="work-area__card-body">
-          <div v-if="pr.body" class="work-area__pr-description" v-html="marked.parse(pr.body)"></div>
+          <div v-if="pr.body" class="work-area__pr-description" v-html="sanitize(marked.parse(pr.body) as string)"></div>
 
           <!-- Build failure info -->
           <div v-if="pr.buildStatus === 'red' && pr.failedChecks?.length" class="work-area__build-failures">
