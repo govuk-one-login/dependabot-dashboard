@@ -1,0 +1,21 @@
+<script setup lang="ts">
+// GOV.UK Phase Banner component
+</script>
+
+<template>
+  <div class="govuk-phase-banner">
+    <p class="govuk-phase-banner__content">
+      <strong class="govuk-tag govuk-phase-banner__content__tag">
+        Alpha
+      </strong>
+      <span class="govuk-phase-banner__text">
+        This is a new service – your
+        <a class="govuk-link" href="#">feedback</a> will help us to improve it.
+      </span>
+    </p>
+  </div>
+</template>
+
+<style scoped>
+/* Phase banner styles are provided by GOV.UK Frontend */
+</style>

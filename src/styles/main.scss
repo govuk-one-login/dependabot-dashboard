@@ -1,0 +1,108 @@
+// GOV.UK Frontend imports
+@use "sass:color";
+$govuk-suppressed-warnings: ("pre-brand-colour");
+@import 'govuk-frontend/dist/govuk/index';
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+// Additional custom styles for the DPT Admin Dashboard
+
+// Ensure the body takes full height
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #ffffff;
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  color: #1a1a2e;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+p, li, td, th, label, a {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.govuk-width-container {
+  &:not(.one-login-header__container) {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.govuk-main-wrapper {
+  flex: 1 0 auto;
+  padding-bottom: govuk-spacing(9);
+}
+
+// Custom utility classes
+.govuk-\!-text-align-center {
+  text-align: center;
+}
+
+.govuk-\!-text-align-right {
+  text-align: right;
+}
+
+// Enhanced card styling
+.govuk-card {
+  background-color: govuk-colour("black", $variant: "tint-95");
+  padding: govuk-spacing(4);
+  margin-bottom: govuk-spacing(4);
+  
+  &--clickable {
+    &:hover {
+      background-color: color.adjust(govuk-colour("black", $variant: "tint-95"), $lightness: -5%);
+      cursor: pointer;
+    }
+  }
+}
+
+// Dashboard specific styles
+.dashboard-stats {
+  margin-bottom: govuk-spacing(6);
+}
+
+// Modern enhancements (ready for future additions)
+.modern-card {
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  padding: govuk-spacing(4);
+  margin-bottom: govuk-spacing(4);
+  transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+  
+  &:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
+  }
+}
+
+// Fix footer crown image — govuk-frontend references an asset path that
+// doesn't resolve at build time, so we point it at our local copy.
+.govuk-footer__copyright-logo::before {
+  background-image: url("/assets/images/govuk-crest.svg") !important;
+
+  @supports (mask-image: url("")) {
+    -webkit-mask-image: url("/assets/images/govuk-crest.svg") !important;
+    mask-image: url("/assets/images/govuk-crest.svg") !important;
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 640px) {
+  .stat-card__number {
+    font-size: 32px;
+  }
+}
