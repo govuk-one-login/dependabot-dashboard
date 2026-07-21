@@ -70,7 +70,7 @@ router.get("/dependabot-preflight", async (req: Request, res: Response) => {
       const vResult = await runSandboxCommand("kiro-cli --version 2>&1");
       if (vResult.ok && vResult.stdout.length > 0) {
         kiroInstalled = true;
-        kiroVersion = vResult.stdout.split("\n")[0] ?? "";
+        kiroVersion = vResult.stdout.split("\n").find((l) => /\d+\.\d+/.test(l)) ?? vResult.stdout.split("\n")[0] ?? "";
         const whoami = await runSandboxCommand("kiro-cli whoami 2>&1");
         if (whoami.ok && whoami.stdout.toLowerCase().includes("logged in")) {
           kiroAuthenticated = true;

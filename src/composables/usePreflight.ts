@@ -196,7 +196,7 @@ export function usePreflight() {
           : { status: 'fail', detail: 'kiro-cli not found in sandbox — ensure di-kiro-ai-sandbox is running' }
         checks.value.kiroAuth = data.kiro.authenticated
           ? { status: 'ok',   detail: data.kiro.authUser ? `Signed in as ${data.kiro.authUser}` : 'Authenticated' }
-          : { status: 'fail', detail: data.kiro.installed ? 'Not authenticated — run: sbx exec di-kiro-ai-sandbox kiro-cli login' : 'kiro-cli not available in sandbox' }
+          : { status: 'fail', detail: data.kiro.installed ? 'Follow the authentication instructions contained in the README file in the ai-sandbox repo' : 'kiro-cli not available in sandbox' }
         aiSandboxFound.value = data.kiro.aiSandboxFound ?? false
       } else {
         checks.value.sbxInstalled  = { status: 'pending', detail: '' }

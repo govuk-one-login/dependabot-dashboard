@@ -338,11 +338,15 @@ onUnmounted(cleanup)
                 <span v-if="checks.kiroAuth.detail" class="check-item__detail">{{ checks.kiroAuth.detail }}</span>
               </div>
             </div>
-            <p v-if="checks.kiroAuth.status === 'fail' && checks.kiroInstalled.status === 'ok'" class="help-text">
-              Run <code>kiro-cli</code> in your terminal to sign in via IAM Identity Centre.
-              Use your organisation's SSO Start URL and <code>eu-west-2</code> as Region.
-              <strong>Requires VPN.</strong>
-            </p>
+            <div v-if="checks.kiroAuth.status === 'fail' && checks.kiroInstalled.status === 'ok'" class="help-text">
+              <p>Within the ai-sandbox repo, run the following commands:</p>
+              <pre><code># Validate the kit
+sbx kit validate di-kit
+
+# Run from local directory
+sbx run di-kiro . --kit di-kit</code></pre>
+              <p><strong>Requires VPN access.</strong></p>
+            </div>
           </template>
 
           <template v-if="agentChoice === 'ollama'">
