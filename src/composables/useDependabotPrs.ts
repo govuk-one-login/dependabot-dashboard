@@ -775,8 +775,115 @@ export function useDependabotPrs(
     }, 6000);
   }
 
+  // ── Branch monitoring ───────────────────────────────────────────────
+  const branchMonitoring = ref(false);
+  const branchMonitorPrs = ref<Array<{ repo: string; prNumber: number }>>([]);
+  const branchMonitorProgress = ref<string | null>(null);
+  let branchMonitorInterval: ReturnType<typeof setInterval> | null = null;
+
+  function startBranchMonitoring() {
+    // Capture the currently outdated PRs to monitor
+    const outdatedPrs = results.value.flatMap((r) =>
+      r.prs
+        .filter((p) => p.isBehind)
+        .map((p) => ({ repo: r.repo, prNumber: p.number })),
+    );
+    if (outdatedPrs.length === 0) {
+      branchMonitoring.value = false;
+      return;
+    }
+    branchMonitorPrs.value = outdatedPrs;
+    branchMonitorProgress.value = `Monitoring ${outdatedPrs.length} branch${outdatedPrs.length !== 1 ? "es" : ""}…`;
+
+    // Start polling every 30 seconds
+    if (branchMonitorInterval) clearInterval(branchMonitorInterval);
+    branchMonitorInterval = setInterval(checkMonitoredBranches, 30_000);
+  }
+
+  function stopBranchMonitoring() {
+    if (branchMonitorInterval) {
+      clearInterval(branchMonitorInterval);
+      branchMonitorInterval = null;
+    }
+    branchMonitorPrs.value = [];
+    branchMonitorProgress.value = null;
+  }
+
+  async function checkMonitoredBranches() {
+    if (branchMonitorPrs.value.length === 0) {
+      stopBranchMonitoring();
+      branchMonitoring.value = false;
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/dependabot-check-branches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prs: branchMonitorPrs.value }),
+      });
+      if (!res.ok) return;
+
+      const data = (await res.json()) as {
+        results: Array<{ repo: string; prNumber: number; isBehind: boolean }>;
+      };
+
+      const stillBehind = data.results.filter((r) => r.isBehind);
+      const totalMonitored = branchMonitorPrs.value.length;
+      const upToDate = totalMonitored - stillBehind.length;
+
+      branchMonitorProgress.value = `${upToDate}/${totalMonitored} up to date`;
+
+      if (stillBehind.length === 0) {
+        // All branches are now up to date!
+        stopBranchMonitoring();
+        branchMonitoring.value = false;
+        notifyUser(
+          "✅ All branches updated!",
+          "All monitored branches are now up to date. You can refresh the page.",
+        );
+        // Play an alarm sound
+        playAlarm();
+      }
+    } catch {
+      // Silently retry on next interval
+    }
+  }
+
+  function playAlarm() {
+    try {
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      oscillator.start(ctx.currentTime);
+      oscillator.frequency.setValueAtTime(660, ctx.currentTime + 0.15);
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime + 0.3);
+      oscillator.frequency.setValueAtTime(660, ctx.currentTime + 0.45);
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime + 0.6);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.8);
+      oscillator.stop(ctx.currentTime + 0.8);
+    } catch {
+      // Audio not available — notification is enough
+    }
+  }
+
+  // Watch branchMonitoring toggle
+  watch(branchMonitoring, (active) => {
+    if (active) {
+      startBranchMonitoring();
+    } else {
+      stopBranchMonitoring();
+    }
+  });
+
   function cleanup() {
     if (bulkSummaryTimer) clearTimeout(bulkSummaryTimer);
+    stopBranchMonitoring();
     activeEventSources.forEach((source) => source.close());
     activeEventSources.clear();
   }
@@ -838,6 +945,10 @@ export function useDependabotPrs(
     bulkUpdating,
     bulkUpdateSummary,
     bulkUpdateBranches,
+
+    // Branch monitoring
+    branchMonitoring,
+    branchMonitorProgress,
 
     // Helpers
     stateFor,

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { execFile, runCommand, BREW_PATH } from "../helpers.js";
 import { GITHUB_ORG, getRepoCache, isKnownRepo } from "./teams-cache.js";
-import { fetchDependabotPrsForRepo } from "./pr-fetching.js";
+import { fetchDependabotPrsForRepo, fetchIsBehindForPr } from "./pr-fetching.js";
 
 const router = Router();
 
@@ -262,6 +262,47 @@ router.post("/dependabot-update-branch", async (req: Request, res: Response) => 
       res.json({ success: true });
     },
   );
+});
+
+// ── Bulk branch-status check (used by branch monitoring) ────────────────────
+
+router.post("/dependabot-check-branches", async (req: Request, res: Response) => {
+  const { prs } = req.body as { prs: Array<{ repo: string; prNumber: number }> };
+  if (!Array.isArray(prs) || prs.length === 0) {
+    res.status(400).json({ error: "prs array is required" });
+    return;
+  }
+  // Validate all entries
+  for (const { repo, prNumber } of prs) {
+    if (!isValidRepoName(repo) || !isValidPrNumber(String(prNumber))) {
+      res.status(400).json({ error: `Invalid repo or prNumber: ${repo}#${prNumber}` });
+      return;
+    }
+  }
+
+  try {
+    const results = await Promise.all(
+      prs.map(async ({ repo, prNumber }) => {
+        if (!(await isKnownRepo(repo))) {
+          return { repo, prNumber, isBehind: false, error: "Unknown repository" };
+        }
+        // Fetch PR's base and head branch names
+        const prData = await runCommand(
+          `gh pr view ${prNumber} --repo ${GITHUB_ORG}/${repo} --json baseRefName,headRefName --jq '{base: .baseRefName, head: .headRefName}'`,
+        );
+        if (!prData.ok) {
+          return { repo, prNumber, isBehind: false, error: "Could not fetch PR info" };
+        }
+        const parsed = JSON.parse(prData.stdout) as { base: string; head: string };
+        const isBehind = await fetchIsBehindForPr(repo, parsed.base, parsed.head);
+        return { repo, prNumber, isBehind };
+      }),
+    );
+    res.json({ results });
+  } catch (err) {
+    console.error("[dependabot] check-branches error:", err);
+    res.status(500).json({ error: "Failed to check branch status" });
+  }
 });
 
 router.post("/dependabot-recreate-pr", async (req: Request, res: Response) => {

@@ -257,6 +257,7 @@ function renderPlanMarkdown(raw: string): string {
               <Teleport to="body">
                 <div v-if="menuOpen" class="work-area__menu-backdrop" @click="closeMenu"></div>
                 <ul v-if="menuOpen" class="work-area__menu-list" :style="menuStyle" @click="closeMenu">
+                  <!-- Approve -->
                   <li v-if="!state.approved && !pr.myApproved && pr.buildStatus !== 'red' && (!pr.isBehind || state.updated)">
                     <button
                       class="work-area__menu-item work-area__menu-item--approve"
@@ -266,6 +267,41 @@ function renderPlanMarkdown(raw: string): string {
                       {{ state.approving ? 'Approving…' : 'Approve PR' }}
                     </button>
                   </li>
+
+                  <!-- AI Fix group -->
+                  <li v-if="!state.approved && !pr.myApproved && pr.buildStatus !== 'red' && (!pr.isBehind || state.updated)"><hr class="work-area__menu-divider" /></li>
+                  <li class="work-area__menu-group-label">AI fix</li>
+                  <li>
+                    <button
+                      class="work-area__menu-item work-area__menu-item--ai-primary"
+                      :disabled="isAgentBusy || state.fixed"
+                      @click="emit('plan-with-ai', repo, pr.number)"
+                    >
+                      {{ isAgentBusy ? planWithAiLabel : '✦ Plan &amp; fix with Kiro' }}
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      class="work-area__menu-item work-area__menu-item--ai-secondary"
+                      :disabled="isAgentBusy || state.fixed"
+                      @click="showInstructions"
+                    >
+                      With instructions…
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      class="work-area__menu-item work-area__menu-item--ai-secondary"
+                      :disabled="isAgentBusy || state.fixed"
+                      @click="emit('fix-with-ai', repo, pr.number)"
+                    >
+                      Fix directly (no plan)
+                    </button>
+                  </li>
+
+                  <!-- PR commands group -->
+                  <li><hr class="work-area__menu-divider" /></li>
+                  <li class="work-area__menu-group-label">Branch commands</li>
                   <li>
                     <button
                       class="work-area__menu-item"
@@ -278,45 +314,21 @@ function renderPlanMarkdown(raw: string): string {
                   <li>
                     <button
                       class="work-area__menu-item"
-                      :disabled="isAgentBusy || state.fixed"
-                      @click="emit('plan-with-ai', repo, pr.number)"
+                      :disabled="state.recreating || state.recreated"
+                      @click="emit('recreate-pr', repo, pr.number)"
                     >
-                      {{ planWithAiLabel }}
+                      {{ state.recreating ? 'Recreating…' : state.recreated ? '✓ Recreated' : 'Recreate PR' }}
                     </button>
                   </li>
-                  <li>
-                    <button
-                      class="work-area__menu-item"
-                      :disabled="isAgentBusy || state.fixed"
-                      @click="showInstructions"
-                    >
-                      {{ agentMode === 'ollama' ? `Plan with Ollama + instructions` : 'Plan with AI + instructions' }}
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      class="work-area__menu-item work-area__menu-item--secondary"
-                      :disabled="isAgentBusy || state.fixed"
-                      @click="emit('fix-with-ai', repo, pr.number)"
-                    >
-                      {{ fixWithAiLabel }}
-                    </button>
-                  </li>
+
+                  <!-- Other -->
+                  <li><hr class="work-area__menu-divider" /></li>
                   <li>
                     <button
                       class="work-area__menu-item work-area__menu-item--copy"
                       @click="emit('copy-slack', repo, pr)"
                     >
                       Copy for Slack
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      class="work-area__menu-item"
-                      :disabled="state.recreating || state.recreated"
-                      @click="emit('recreate-pr', repo, pr.number)"
-                    >
-                      {{ state.recreating ? 'Recreating…' : state.recreated ? '✓ Recreated' : 'Recreate PR' }}
                     </button>
                   </li>
                   <li>
@@ -1195,10 +1207,20 @@ function renderPlanMarkdown(raw: string): string {
   border: 1px solid #e5e5e5;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-  min-width: 220px;
+  min-width: 230px;
   list-style: none;
   margin: 0;
   padding: 4px 0;
+}
+
+.work-area__menu-group-label {
+  padding: 6px 16px 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #505a5f;
+  pointer-events: none;
 }
 
 .work-area__menu-item {
@@ -1223,6 +1245,10 @@ function renderPlanMarkdown(raw: string): string {
 .work-area__menu-item--danger { color: #d4351c; }
 .work-area__menu-item--danger:hover:not(:disabled) { background: #fce8e6; }
 .work-area__menu-item--done { color: #00703c; }
+.work-area__menu-item--ai-primary { color: #4c2c92; font-weight: 600; padding-left: 16px; }
+.work-area__menu-item--ai-primary:hover:not(:disabled) { background: #f3f0f9; }
+.work-area__menu-item--ai-secondary { padding-left: 28px; color: #505a5f; font-size: 0.775rem; }
+.work-area__menu-item--ai-secondary:hover:not(:disabled) { background: #f5f5f5; }
 
 .work-area__menu-divider {
   border-top: 1px solid #f0f0f0;
