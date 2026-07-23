@@ -88,6 +88,10 @@ const {
   mergePr,
   updateBranch,
   stopFix,
+  planWithAi,
+  executePlan,
+  replanWithComment,
+  discardPlan,
   fixWithAi,
   pushFix,
   discardFix,
@@ -267,6 +271,10 @@ onUnmounted(() => {
             @merge="mergePr"
             @update-branch="updateBranch"
             @fix-with-ai="fixWithAi"
+            @plan-with-ai="planWithAi"
+            @execute-plan="executePlan"
+            @replan="replanWithComment"
+            @discard-plan="discardPlan"
             @stop-fix="stopFix"
             @push-fix="pushFix"
             @discard-fix="discardFix"

@@ -10,6 +10,16 @@ export interface ActionState {
   updated: boolean;
   approveError: string | null;
   updateError: string | null;
+  // Planning phase
+  planning: boolean;
+  planLog: string[];
+  planText: string;
+  pendingPlanJobId: string | null;
+  planError: string | null;
+  showPlanLog: boolean;
+  replanComment: string;
+  showReplanInput: boolean;
+  // Fix phase
   fixing: boolean;
   stopping: boolean;
   fixed: boolean;
@@ -44,6 +54,14 @@ export function createActionState(): ActionState {
     updated: false,
     approveError: null,
     updateError: null,
+    planning: false,
+    planLog: [],
+    planText: "",
+    pendingPlanJobId: null,
+    planError: null,
+    showPlanLog: false,
+    replanComment: "",
+    showReplanInput: false,
     fixing: false,
     stopping: false,
     fixed: false,

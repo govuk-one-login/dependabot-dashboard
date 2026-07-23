@@ -39,6 +39,13 @@ const props = defineProps<{
   agentModel?: string
 }>()
 
+const planWithAiLabel = computed(() => {
+  if (props.state.planning) return 'Planning…'
+  return props.agentMode === 'ollama'
+    ? `Plan fix (Ollama · ${props.agentModel ?? 'ollama'})`
+    : 'Plan & fix with AI (Kiro)'
+})
+
 const fixWithAiLabel = computed(() => {
   if (props.state.fixing) return 'Fixing…'
   if (props.state.fixed) return '✓ Fixed'
@@ -46,13 +53,17 @@ const fixWithAiLabel = computed(() => {
     const m = props.agentModel ?? 'ollama'
     return `Fix with AI (Ollama · ${m})`
   }
-  return 'Fix with AI (Kiro)'
+  return 'Fix directly (no plan)'
 })
 
 const emit = defineEmits<{
   (e: 'approve', repo: string, prNumber: number): void
   (e: 'merge', repo: string, prNumber: number): void
   (e: 'update-branch', repo: string, prNumber: number): void
+  (e: 'plan-with-ai', repo: string, prNumber: number, extraInstructions?: string): void
+  (e: 'execute-plan', repo: string, prNumber: number): void
+  (e: 'replan', repo: string, prNumber: number): void
+  (e: 'discard-plan', repo: string, prNumber: number): void
   (e: 'fix-with-ai', repo: string, prNumber: number, extraInstructions?: string): void
   (e: 'stop-fix', repo: string, prNumber: number): void
   (e: 'push-fix', repo: string, prNumber: number): void
@@ -191,7 +202,15 @@ function cancelInstructions() {
 function runFixWithInstructions() {
   const instructions = props.state.extraInstructions.trim()
   props.state.showInstructionsInput = false
-  emit('fix-with-ai', props.repo, props.pr.number, instructions || undefined)
+  emit('plan-with-ai', props.repo, props.pr.number, instructions || undefined)
+}
+
+const isAgentBusy = computed(() =>
+  props.state.planning || props.state.fixing
+)
+
+function renderPlanMarkdown(raw: string): string {
+  return renderSummaryMarkdown(raw)
 }
 </script>
 
@@ -259,19 +278,28 @@ function runFixWithInstructions() {
                   <li>
                     <button
                       class="work-area__menu-item"
-                      :disabled="state.fixing || state.fixed"
-                      @click="emit('fix-with-ai', repo, pr.number)"
+                      :disabled="isAgentBusy || state.fixed"
+                      @click="emit('plan-with-ai', repo, pr.number)"
                     >
-                      {{ fixWithAiLabel }}
+                      {{ planWithAiLabel }}
                     </button>
                   </li>
                   <li>
                     <button
                       class="work-area__menu-item"
-                      :disabled="state.fixing || state.fixed"
+                      :disabled="isAgentBusy || state.fixed"
                       @click="showInstructions"
                     >
-                      {{ agentMode === 'ollama' ? `Fix with Ollama + instructions` : 'Fix with AI + instructions' }}
+                      {{ agentMode === 'ollama' ? `Plan with Ollama + instructions` : 'Plan with AI + instructions' }}
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      class="work-area__menu-item work-area__menu-item--secondary"
+                      :disabled="isAgentBusy || state.fixed"
+                      @click="emit('fix-with-ai', repo, pr.number)"
+                    >
+                      {{ fixWithAiLabel }}
                     </button>
                   </li>
                   <li>
@@ -410,9 +438,97 @@ function runFixWithInstructions() {
         </div>
       </div>
 
+      <!-- PLAN CARD: AI Fix Plan awaiting review -->
+      <div
+        v-if="state.planning || state.planText || state.pendingPlanJobId || state.planError"
+        class="work-area__card work-area__card--plan"
+      >
+        <div class="work-area__card-header work-area__card-header--ai">
+          <h3 class="work-area__section-title">
+            AI Fix Plan
+            <span class="work-area__agent-badge">Kiro</span>
+          </h3>
+          <div class="work-area__ai-controls">
+            <button
+              v-if="state.planning"
+              class="work-area__stop-btn"
+              :disabled="state.stopping"
+              @click="emit('stop-fix', repo, pr.number)"
+            >
+              {{ state.stopping ? 'Stopping…' : 'Stop' }}
+            </button>
+            <span v-if="state.planning" class="work-area__running-indicator">
+              <span class="btn-spinner btn-spinner--dark" aria-hidden="true"></span> Analysing…
+            </span>
+          </div>
+        </div>
+
+        <div v-if="state.planError" class="work-area__error work-area__error--block">{{ state.planError }}</div>
+
+        <!-- Plan text -->
+        <div
+          v-if="state.planText"
+          class="work-area__plan-body"
+          v-html="renderPlanMarkdown(state.planText)"
+        ></div>
+
+        <!-- Action buttons when plan is ready -->
+        <div v-if="state.pendingPlanJobId && !state.planning" class="work-area__plan-actions">
+          <button
+            class="govuk-button govuk-!-margin-bottom-0"
+            @click="emit('execute-plan', repo, pr.number)"
+          >
+            Approve plan &amp; fix
+          </button>
+          <button
+            class="govuk-button govuk-button--secondary govuk-!-margin-bottom-0"
+            @click="state.showReplanInput = !state.showReplanInput"
+          >
+            {{ state.showReplanInput ? 'Cancel replan' : 'Replan with comments' }}
+          </button>
+          <button
+            class="govuk-button govuk-button--warning govuk-!-margin-bottom-0"
+            @click="emit('discard-plan', repo, pr.number)"
+          >
+            Discard
+          </button>
+        </div>
+
+        <!-- Replan comment input -->
+        <div v-if="state.showReplanInput" class="work-area__replan-input">
+          <textarea
+            v-model="state.replanComment"
+            class="govuk-textarea work-area__instructions-input"
+            rows="4"
+            placeholder="e.g. Also update the mock in __mocks__/apiClient.ts. The axios change should not affect the retry logic in retryHelper.ts."
+          ></textarea>
+          <div class="work-area__instructions-actions">
+            <button
+              class="govuk-button govuk-!-margin-bottom-0"
+              :disabled="state.planning"
+              @click="emit('replan', repo, pr.number)"
+            >
+              Re-analyse with comments
+            </button>
+          </div>
+        </div>
+
+        <!-- Plan agent log (collapsible) -->
+        <details v-if="state.planLog.length" class="work-area__accordion" :open="state.showPlanLog">
+          <summary
+            class="work-area__accordion-trigger work-area__accordion-trigger--log"
+            @click.prevent="state.showPlanLog = !state.showPlanLog"
+          >
+            <span class="tree-view__chevron" :class="{ 'tree-view__chevron--open': state.showPlanLog }">›</span>
+            Agent output log
+          </summary>
+          <pre v-if="state.showPlanLog" class="work-area__log-output">{{ state.planLog.join('\n') }}</pre>
+        </details>
+      </div>
+
       <!-- BOTTOM CARD: AI Resolution & Diff -->
       <div
-        v-if="state.fixLog.length || state.fixDiff || state.fixSummary || state.pendingJobId || state.discarded"
+        v-if="state.fixLog.length || state.fixDiff || state.fixSummary || state.pendingJobId || state.discarded || state.fixing"
         class="work-area__card work-area__card--bottom"
       >
         <div class="work-area__card-header work-area__card-header--ai">
@@ -522,6 +638,33 @@ function runFixWithInstructions() {
   overflow: hidden;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.work-area__card--plan {
+  border-color: #4c2c92;
+}
+
+.work-area__plan-body {
+  padding: 16px 20px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.work-area__plan-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 20px 16px;
+}
+
+.work-area__replan-input {
+  padding: 0 20px 16px;
+}
+
+.work-area__error--block {
+  padding: 12px 20px;
+  color: #d4351c;
 }
 
 .work-area__card-header {
