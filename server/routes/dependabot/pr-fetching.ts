@@ -164,8 +164,10 @@ export function fetchIsBehindForPr(
   head: string,
 ): Promise<boolean> {
   return new Promise((resolve) => {
+    const encodedBase = encodeURIComponent(base);
+    const encodedHead = encodeURIComponent(head);
     exec(
-      `gh api repos/${GITHUB_ORG}/${repo}/compare/${base}...${head} --jq '.behind_by'`,
+      `gh api repos/${GITHUB_ORG}/${repo}/compare/${encodedBase}...${encodedHead} --jq '.behind_by'`,
       { shell: "/bin/sh", env: { ...process.env, PATH: BREW_PATH } },
       (error: Error | null, stdout: string, stderr: string) => {
         if (error) {

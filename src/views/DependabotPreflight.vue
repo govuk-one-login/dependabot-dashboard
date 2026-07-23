@@ -347,6 +347,19 @@ sbx kit validate di-kit
 sbx run di-kiro . --kit di-kit</code></pre>
               <p><strong>Requires VPN access.</strong></p>
             </div>
+            <div v-else-if="checks.kiroAuth.status === 'fail' && checks.kiroInstalled.status !== 'ok'" class="help-text help-text--guide">
+              <p v-if="aiSandboxFound === false"><strong>Step 1:</strong> Clone the <code>ai-sandbox</code> repository:</p>
+              <pre v-if="aiSandboxFound === false"><code>git clone git@github.com:govuk-one-login/ai-sandbox.git
+cd ai-sandbox</code></pre>
+              <p><strong>{{ aiSandboxFound === false ? 'Step 2:' : '' }}</strong> Follow the setup instructions in the <code>ai-sandbox</code> repo README to start the Kiro sandbox:</p>
+              <pre><code># Validate the kit
+sbx kit validate di-kit
+
+# Start the sandbox (from within ai-sandbox directory)
+sbx run di-kiro . --kit di-kit</code></pre>
+              <p>Once the sandbox is running, Kiro CLI will be available inside it. Re-run checks above when ready.</p>
+              <p class="help-text__note"><strong>Requires VPN access.</strong></p>
+            </div>
           </template>
 
           <template v-if="agentChoice === 'ollama'">
@@ -1301,5 +1314,32 @@ sbx run di-kiro . --kit di-kit</code></pre>
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.78rem;
+}
+
+.help-text--guide {
+  border-left: 3px solid #1d70b8;
+  background: #f0f6fc;
+}
+
+.help-text--guide pre {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  overflow-x: auto;
+}
+
+.help-text--guide pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.help-text__note {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #6e6e6e;
 }
 </style>
