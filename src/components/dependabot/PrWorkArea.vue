@@ -525,8 +525,8 @@ function renderPlanMarkdown(raw: string): string {
           </div>
         </div>
 
-        <!-- Plan agent log (collapsible) -->
-        <details v-if="state.planLog.length" class="work-area__accordion" :open="state.showPlanLog">
+        <!-- Plan agent log (collapsible) — hidden once execution phase starts to avoid duplicate log panels -->
+        <details v-if="state.planLog.length && !state.fixing && !state.fixLog.length" class="work-area__accordion" :open="state.showPlanLog">
           <summary
             class="work-area__accordion-trigger work-area__accordion-trigger--log"
             @click.prevent="state.showPlanLog = !state.showPlanLog"

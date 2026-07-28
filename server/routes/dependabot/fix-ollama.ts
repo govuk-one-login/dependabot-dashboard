@@ -302,8 +302,8 @@ Do NOT include unchanged files. Do NOT use markdown code fences. Use only the <<
         send("log", `  ✓ ${filePath}`);
       }
 
-      await step("git add -A", tmpDir);
-      const diff = await step("git diff --cached", tmpDir);
+      await step('git add -A -- . ":!.ci-logs" ":!.kiro"', tmpDir);
+      const diff = await step('git diff --cached -- . ":!.ci-logs" ":!.kiro"', tmpDir);
 
       if (!diff.trim()) {
         send(

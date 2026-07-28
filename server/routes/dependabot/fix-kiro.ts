@@ -918,15 +918,30 @@ router.get("/dependabot-execute-plan", async (req: Request, res: Response) => {
         return;
       }
 
-      const diff = await step(
-        `sbx exec ${SANDBOX_NAME} sh -c 'cd "${sandboxDir}" && git add -A && git diff --cached'`,
-        undefined,
-        10 * 1024 * 1024,
+      // Write diff to a file inside the sandbox then copy it out —
+      // avoids stdout encoding/terminal artifacts from sbx exec corrupting the patch.
+      const sandboxPatchPath = `${sandboxDir}/.ci-logs/fix.patch`;
+      await step(
+        `sbx exec ${SANDBOX_NAME} sh -c 'cd "${sandboxDir}" && git add -A && git diff --cached -- . ":!.ci-logs" ":!.kiro" > "${sandboxPatchPath}"'`,
       );
       const patchFile = path.join(ciLogsDir, "fix.patch");
-      fs.writeFileSync(patchFile, diff, "utf8");
-      await step(`git apply "${patchFile}"`, tmpDir);
-      await step("git add -A", tmpDir);
+      await step(
+        `sbx cp "${SANDBOX_NAME}:${sandboxPatchPath}" "${patchFile}"`,
+      );
+      const diff = fs.readFileSync(patchFile, "utf8");
+
+      if (!diff.trim()) {
+        send(
+          "log",
+          "ℹ️  Kiro made no source file changes — the failure may need manual review",
+        );
+        send("done", "no-changes");
+        exec(`rm -rf "${tmpDir}"`, { shell: "/bin/sh" }, () => {});
+        return;
+      }
+
+      await step(`git apply --whitespace=nowarn "${patchFile}"`, tmpDir);
+      await step('git add -A -- . ":!.ci-logs" ":!.kiro"', tmpDir);
 
       const jobId = randomUUID();
       pendingFixJobs.set(jobId, {
@@ -1267,15 +1282,30 @@ router.get("/dependabot-fix-pr", async (req: Request, res: Response) => {
         return;
       }
 
-      const diff = await step(
-        `sbx exec ${SANDBOX_NAME} sh -c 'cd "${sandboxDir}" && git add -A && git diff --cached'`,
-        undefined,
-        10 * 1024 * 1024,
+      // Write diff to a file inside the sandbox then copy it out —
+      // avoids stdout encoding/terminal artifacts from sbx exec corrupting the patch.
+      const sandboxPatchPath = `${sandboxDir}/.ci-logs/fix.patch`;
+      await step(
+        `sbx exec ${SANDBOX_NAME} sh -c 'cd "${sandboxDir}" && git add -A && git diff --cached -- . ":!.ci-logs" ":!.kiro" > "${sandboxPatchPath}"'`,
       );
       const patchFile = path.join(ciLogsDir, "fix.patch");
-      fs.writeFileSync(patchFile, diff, "utf8");
-      await step(`git apply "${patchFile}"`, tmpDir);
-      await step("git add -A", tmpDir);
+      await step(
+        `sbx cp "${SANDBOX_NAME}:${sandboxPatchPath}" "${patchFile}"`,
+      );
+      const diff = fs.readFileSync(patchFile, "utf8");
+
+      if (!diff.trim()) {
+        send(
+          "log",
+          "ℹ️  Kiro made no source file changes — the failure may need manual review",
+        );
+        send("done", "no-changes");
+        exec(`rm -rf "${tmpDir}"`, { shell: "/bin/sh" }, () => {});
+        return;
+      }
+
+      await step(`git apply --whitespace=nowarn "${patchFile}"`, tmpDir);
+      await step('git add -A -- . ":!.ci-logs" ":!.kiro"', tmpDir);
 
       const jobId = randomUUID();
       pendingFixJobs.set(jobId, {
@@ -1301,7 +1331,6 @@ router.get("/dependabot-fix-pr", async (req: Request, res: Response) => {
       );
 
       if (summary) send("summary", summary);
-      send("done", `needs-approval:${jobId}`);
       send("done", `needs-approval:${jobId}`);
     } catch (err) {
       send("log", `❌ ${err instanceof Error ? err.message : String(err)}`);
