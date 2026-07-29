@@ -65,6 +65,7 @@ const emit = defineEmits<{
   (e: 'replan', repo: string, prNumber: number): void
   (e: 'discard-plan', repo: string, prNumber: number): void
   (e: 'fix-with-ai', repo: string, prNumber: number, extraInstructions?: string): void
+  (e: 'apply-known-fix', repo: string, prNumber: number, planText: string): void
   (e: 'stop-fix', repo: string, prNumber: number): void
   (e: 'push-fix', repo: string, prNumber: number): void
   (e: 'discard-fix', repo: string, prNumber: number): void
@@ -450,6 +451,41 @@ function renderPlanMarkdown(raw: string): string {
         </div>
       </div>
 
+
+      <!-- FIX SUGGESTION: Known fix from another repo -->
+      <div
+        v-if="state.fixSuggestions.length && !state.planning && !state.fixing && !state.fixDiff && !state.pendingPlanJobId"
+        class="work-area__card work-area__card--suggestion"
+      >
+        <div class="work-area__card-header work-area__card-header--suggestion">
+          <h3 class="work-area__section-title">
+            💡 Known fix available
+          </h3>
+        </div>
+        <div v-for="suggestion in state.fixSuggestions" :key="suggestion.entry.id" class="work-area__suggestion-item">
+          <p class="govuk-body-s govuk-!-margin-bottom-1">
+            <strong>{{ suggestion.entry.fixDescription }}</strong>
+          </p>
+          <p class="govuk-body-s govuk-!-margin-bottom-2 work-area__suggestion-reason">
+            {{ suggestion.reason }}
+          </p>
+          <p v-if="suggestion.entry.appliedTo.length > 1" class="govuk-body-s govuk-!-margin-bottom-2">
+            Successfully applied to {{ suggestion.entry.appliedTo.length }} repo{{ suggestion.entry.appliedTo.length !== 1 ? 's' : '' }}
+          </p>
+          <div class="work-area__suggestion-actions">
+            <button
+              class="govuk-button govuk-button--secondary govuk-!-margin-bottom-0"
+              @click="emit('apply-known-fix', repo, pr.number, suggestion.entry.planText)"
+            >
+              Apply this fix
+            </button>
+            <span class="govuk-tag" :class="suggestion.confidence === 'high' ? 'govuk-tag--green' : 'govuk-tag--yellow'">
+              {{ suggestion.confidence }} confidence
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- PLAN CARD: AI Fix Plan awaiting review -->
       <div
         v-if="state.planning || state.planText || state.pendingPlanJobId || state.planError"
@@ -654,6 +690,30 @@ function renderPlanMarkdown(raw: string): string {
 
 .work-area__card--plan {
   border-color: #4c2c92;
+}
+
+.work-area__card--suggestion {
+  border-color: #f47738;
+  background: #fef7f3;
+}
+
+.work-area__card-header--suggestion {
+  background: #fef7f3;
+  border-bottom-color: #f4773833;
+}
+
+.work-area__suggestion-item {
+  padding: 12px 20px;
+}
+
+.work-area__suggestion-reason {
+  color: #505a5f;
+}
+
+.work-area__suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .work-area__plan-body {

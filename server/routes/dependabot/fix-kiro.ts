@@ -13,6 +13,7 @@ import {
   SANDBOX_NAME,
 } from "../helpers.js";
 import { GITHUB_ORG, isKnownRepo } from "./teams-cache.js";
+import { recordFix } from "./fix-registry.js";
 
 // ── Pending jobs ────────────────────────────────────────────────────────────
 
@@ -1374,6 +1375,14 @@ router.post("/dependabot-push-fix", async (req: Request, res: Response) => {
           err ? reject(new Error(stderr || err.message)) : resolve(),
       ),
     );
+
+    // Record the fix in the registry for cross-repo suggestions
+    recordFix({
+      repo: job.repo,
+      prNumber: job.prNumber,
+      diff: job.diff,
+    });
+
     res.json({ success: true });
   } catch (err) {
     res

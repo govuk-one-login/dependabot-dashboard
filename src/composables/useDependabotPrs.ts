@@ -1,5 +1,5 @@
 import { ref, computed, watch, reactive } from "vue";
-import type { ActionState, PrStatus } from "@/types/dependabot";
+import type { ActionState, PrStatus, FixSuggestion } from "@/types/dependabot";
 import { createActionState } from "@/types/dependabot";
 
 // ── Data types (from API) ───────────────────────────────────────────
@@ -170,6 +170,28 @@ export function useDependabotPrs(
     // Auto-expand the repo if collapsed
     if (!expandedRepos[repo]) {
       expandedRepos[repo] = true;
+    }
+    // Check for fix suggestions if this PR is failing
+    checkFixSuggestions(repo, prNumber);
+  }
+
+  /** Query the fix registry for known fixes that match this PR's dependency upgrade. */
+  async function checkFixSuggestions(repo: string, prNumber: number) {
+    const repoResult = results.value.find((r) => r.repo === repo);
+    const pr = repoResult?.prs.find((p) => p.number === prNumber);
+    if (!pr || pr.buildStatus !== "red") return;
+
+    const state = stateFor(repo, prNumber);
+    try {
+      const res = await fetch(
+        `/api/dependabot-fix-suggestions?prTitle=${encodeURIComponent(pr.title)}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        state.fixSuggestions = (data.suggestions ?? []) as FixSuggestion[];
+      }
+    } catch {
+      // Non-critical — silently ignore
     }
   }
 
@@ -619,6 +641,21 @@ export function useDependabotPrs(
     });
   }
 
+  /**
+   * Apply a previously-approved fix from the registry.
+   * Uses the known plan text as instructions for the agent so it implements
+   * the same fix without re-analysing from scratch.
+   */
+  function applyKnownFix(repo: string, prNumber: number, planText: string) {
+    const instructions = [
+      "A fix for this exact dependency upgrade has been successfully applied to another repository.",
+      "Implement the following fix plan — it has already been verified to work:",
+      "",
+      planText,
+    ].join("\n");
+    fixWithAi(repo, prNumber, instructions);
+  }
+
   async function pushFix(repo: string, prNumber: number) {
     const state = stateFor(repo, prNumber);
     state.pushing = true;
@@ -935,6 +972,7 @@ export function useDependabotPrs(
     executePlan,
     discardPlan,
     fixWithAi,
+    applyKnownFix,
     pushFix,
     discardFix,
     copySlackMessage,

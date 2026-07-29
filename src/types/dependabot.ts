@@ -1,5 +1,21 @@
 export type PrStatus = "passing" | "failing" | "outdated";
 
+export interface FixSuggestion {
+  entry: {
+    id: string;
+    dependencyName: string;
+    brokenVersion: string;
+    fixedVersion: string;
+    fixDescription: string;
+    planText: string;
+    diff: string;
+    appliedTo: Array<{ repo: string; prNumber: string; timestamp: number }>;
+    createdAt: number;
+  };
+  confidence: "high" | "medium";
+  reason: string;
+}
+
 export interface ActionState {
   approving: boolean;
   approved: boolean;
@@ -41,6 +57,8 @@ export interface ActionState {
   slackCopied: boolean;
   extraInstructions: string;
   showInstructionsInput: boolean;
+  // Fix suggestions from registry (cross-repo known fixes)
+  fixSuggestions: FixSuggestion[];
 }
 
 export function createActionState(): ActionState {
@@ -83,5 +101,6 @@ export function createActionState(): ActionState {
     slackCopied: false,
     extraInstructions: "",
     showInstructionsInput: false,
+    fixSuggestions: [],
   };
 }

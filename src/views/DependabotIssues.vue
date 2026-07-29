@@ -94,6 +94,7 @@ const {
   replanWithComment,
   discardPlan,
   fixWithAi,
+  applyKnownFix,
   pushFix,
   discardFix,
   copySlackMessage,
@@ -365,6 +366,7 @@ onUnmounted(() => {
             @merge="mergePr"
             @update-branch="updateBranch"
             @fix-with-ai="fixWithAi"
+            @apply-known-fix="applyKnownFix"
             @plan-with-ai="planWithAi"
             @execute-plan="executePlan"
             @replan="replanWithComment"
