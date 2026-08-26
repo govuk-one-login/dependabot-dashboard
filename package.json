@@ -25,11 +25,11 @@
     "@types/marked": "^6.0.0",
     "cors": "^2.8.6",
     "diff2html": "^3.4.56",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.14",
     "express": "^5.2.1",
     "govuk-frontend": "^6.4.0",
     "helmet": "^8.3.0",
-    "marked": "^18.0.9"
+    "marked": "^18.0.10"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
